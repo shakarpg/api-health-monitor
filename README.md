@@ -5,19 +5,10 @@ Um monitor de saúde de APIs leve, assíncrono e profissional desenvolvido em Ru
 ## 🚀 Funcionalidades
 
 - **Assincronismo:** Utiliza `tokio` e `reqwest` para checagens de alta performance.
-- **Configuração Simples:** Gerencie endpoints e intervalos via arquivo `config.yaml`.
-- **Alertas Inteligentes:** Integração com Webhooks (Discord/Slack/Teams).
-- **Notificações por Mudança de Estado:** Evita spam, notificando apenas quando um serviço cai ou volta a ficar online.
-- **Logs Detalhados:** Sistema de logs estruturado para auditoria e debug.
-
-## 🛠️ Tecnologias Utilizadas
-
-- **Rust 2021 Edition**
-- **Tokio:** Runtime assíncrona.
-- **Reqwest:** Cliente HTTP para as checagens.
-- **Serde & Serde YAML:** Serialização de configurações.
-- **Anyhow:** Tratamento de erros simplificado.
-- **Env Logger & Log:** Sistema de logging profissional.
+- **Configuração Flexível:** Gerencie endpoints via `config.yaml` com suporte a variáveis de ambiente via `.env`.
+- **Validação Robusta:** Validação rigorosa de URLs e códigos de status na inicialização.
+- **Alertas Inteligentes:** Integração com Webhooks (Discord/Slack/Teams) com lógica anti-spam.
+- **Testes de Qualidade:** Suite de testes unitários usando `wiremock` para simular cenários de rede.
 
 ## 📋 Pré-requisitos
 
@@ -26,28 +17,31 @@ Um monitor de saúde de APIs leve, assíncrono e profissional desenvolvido em Ru
 
 ## 🔧 Configuração
 
-Edite o arquivo `config.yaml`:
+1. Crie o seu arquivo de configuração a partir do exemplo:
+   ```bash
+   cp config.example.yaml config.yaml
+   ```
 
-```yaml
-check_interval_seconds: 60
+2. Configure suas variáveis de ambiente no arquivo `.env`:
+   ```env
+   DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/sua-url-aqui
+   ```
 
-endpoints:
-  - name: "Meu Serviço API"
-    url: "https://api.exemplo.com/health"
-    expected_status: 200
-
-notifications:
-  webhook_url: "SUA_WEBHOOK_URL_AQUI"
-  enabled: true
-```
+3. (Opcional) Edite o `config.yaml` para adicionar os endpoints que deseja monitorar.
 
 ## 🏃 Como Executar
 
-1. Clone o repositório ou copie os arquivos.
-2. Compile e execute:
-   ```bash
-   RUST_LOG=info cargo run
-   ```
+Para rodar o monitor localmente:
+```bash
+RUST_LOG=info cargo run
+```
+
+## 🧪 Como Rodar os Testes
+
+Garantimos a qualidade do código com testes automatizados. Para executá-los:
+```bash
+cargo test
+```
 
 ## 📦 Build para Produção
 
@@ -61,5 +55,6 @@ O executável estará em `./target/release/api-health-monitor`.
 
 1. **Segurança de Memória:** Rust garante que não haverá *crashes* por acesso inválido à memória.
 2. **Concorrência Segura:** O uso de `async/await` permite monitorar centenas de APIs com baixíssimo consumo de recursos.
-3. **Tratamento de Erros:** Não usamos `unwrap()` em produção; erros de rede ou de parse são tratados de forma resiliente.
-4. **Arquitetura Limpa:** Separação clara entre configuração, lógica de monitoramento e notificações.
+3. **Validação de Entrada:** O programa valida URLs e configurações antes de iniciar, evitando erros em tempo de execução.
+4. **Tratamento de Erros:** Uso de `anyhow` para propagação limpa de erros e logs detalhados.
+5. **Segredos Protegidos:** Uso de `.env` e `config.example.yaml` para evitar vazamento de chaves sensíveis no controle de versão.
