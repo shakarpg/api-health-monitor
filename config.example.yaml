@@ -1,0 +1,17 @@
+# Configuração do Monitor de Saúde de APIs
+check_interval_seconds: 60
+
+endpoints:
+  - name: "Google"
+    url: "https://www.google.com"
+    expected_status: 200
+  - name: "GitHub"
+    url: "https://api.github.com/zen"
+    expected_status: 200
+  - name: "JSONPlaceholder Test"
+    url: "https://jsonplaceholder.typicode.com/posts/1"
+    expected_status: 200
+
+notifications:
+  webhook_url: "${DISCORD_WEBHOOK_URL}"
+  enabled: true

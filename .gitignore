@@ -3,3 +3,5 @@
 **/*.rs.bk
 .env
 config.yaml.local
+/config.yaml
+/.env
