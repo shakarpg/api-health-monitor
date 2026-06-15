@@ -8,6 +8,22 @@ use log::{info, error, warn};
 use chrono::Local;
 use url::Url;
 use dotenvy::dotenv;
+use thiserror::Error;
+
+/// Erros customizados para o Monitor de Saúde
+#[derive(Error, Debug)]
+pub enum MonitorError {
+    #[error("Intervalo de checagem inválido: {0}. Deve ser maior que 0.")]
+    InvalidInterval(u64),
+    #[error("Status esperado inválido para {name}: {status}. Deve estar entre 100 e 599.")]
+    InvalidStatus { name: String, status: u16 },
+    #[error("URL inválida para {name}: {source}")]
+    InvalidUrl { name: String, source: url::ParseError },
+    #[error("Configuração de notificação incompleta: Webhook URL é obrigatória quando ativada.")]
+    MissingWebhook,
+    #[error("Falha na requisição HTTP para {name}: {source}")]
+    HttpRequestError { name: String, source: reqwest::Error },
+}
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct Endpoint {
@@ -30,24 +46,27 @@ struct Config {
 }
 
 impl Config {
-    fn validate(&self) -> Result<()> {
+    /// Valida as configurações do monitor
+    fn validate(&self) -> Result<(), MonitorError> {
         if self.check_interval_seconds == 0 {
-            return Err(anyhow!("O intervalo de checagem deve ser maior que 0"));
+            return Err(MonitorError::InvalidInterval(self.check_interval_seconds));
         }
 
         for endpoint in &self.endpoints {
             if endpoint.expected_status < 100 || endpoint.expected_status > 599 {
-                return Err(anyhow!("Status esperado inválido para {}: {}", endpoint.name, endpoint.expected_status));
+                return Err(MonitorError::InvalidStatus { 
+                    name: endpoint.name.clone(), 
+                    status: endpoint.expected_status 
+                });
             }
-            Url::parse(&endpoint.url).context(format!("URL inválida para endpoint: {}", endpoint.name))?;
+            Url::parse(&endpoint.url).map_err(|e| MonitorError::InvalidUrl { 
+                name: endpoint.name.clone(), 
+                source: e 
+            })?;
         }
 
-        if self.notifications.enabled {
-            if let Some(ref url) = self.notifications.webhook_url {
-                Url::parse(url).context("URL de webhook inválida")?;
-            } else {
-                return Err(anyhow!("Webhook URL é obrigatória quando notificações estão ativadas"));
-            }
+        if self.notifications.enabled && self.notifications.webhook_url.is_none() {
+            return Err(MonitorError::MissingWebhook);
         }
 
         Ok(())
@@ -72,33 +91,34 @@ impl Monitor {
         })
     }
 
-    async fn check_endpoint(&self, endpoint: &Endpoint) -> Result<bool> {
-        match self.client.get(&endpoint.url).send().await {
-            Ok(resp) => {
-                let status = resp.status().as_u16();
-                if status == endpoint.expected_status {
-                    info!("[{}] {} está UP (Status: {})", endpoint.name, endpoint.url, status);
-                    Ok(true)
-                } else {
-                    warn!("[{}] {} está DOWN! Esperado: {}, Recebido: {}", 
-                        endpoint.name, endpoint.url, endpoint.expected_status, status);
-                    Ok(false)
-                }
-            }
-            Err(e) => {
-                error!("[{}] Erro ao acessar {}: {}", endpoint.name, endpoint.url, e);
-                Ok(false)
-            }
+    /// Verifica o status de um endpoint específico
+    async fn check_endpoint(&self, endpoint: &Endpoint) -> Result<bool, MonitorError> {
+        let response = self.client.get(&endpoint.url).send().await
+            .map_err(|e| MonitorError::HttpRequestError { 
+                name: endpoint.name.clone(), 
+                source: e 
+            })?;
+
+        let status = response.status().as_u16();
+        if status == endpoint.expected_status {
+            info!("[{}] {} está UP (Status: {})", endpoint.name, endpoint.url, status);
+            Ok(true)
+        } else {
+            warn!("[{}] {} está DOWN! Esperado: {}, Recebido: {}", 
+                endpoint.name, endpoint.url, endpoint.expected_status, status);
+            Ok(false)
         }
     }
 
+    /// Envia notificação via webhook se habilitado
     async fn send_notification(&self, endpoint: &Endpoint, is_up: bool) -> Result<()> {
         if !self.config.notifications.enabled {
             return Ok(());
         }
 
+        // Uso idiomático de Option para obter a URL do webhook
         let webhook_url = self.config.notifications.webhook_url.as_ref()
-            .context("Webhook URL não configurada")?;
+            .context("Webhook URL não configurada, mas notificações estão ativadas")?;
 
         let status_str = if is_up { "VOLTOU A FICAR ONLINE" } else { "ESTÁ FORA DO AR" };
         let emoji = if is_up { "✅" } else { "🚨" };
@@ -118,6 +138,7 @@ impl Monitor {
         Ok(())
     }
 
+    /// Loop principal de execução do monitor
     pub async fn run(&self) {
         info!("Iniciando Monitor de Saúde de APIs...");
         info!("Monitorando {} endpoints a cada {} segundos.", 
@@ -127,13 +148,24 @@ impl Monitor {
 
         loop {
             for (i, endpoint) in self.config.endpoints.iter().enumerate() {
-                let current_state = self.check_endpoint(endpoint).await.unwrap_or(false);
-                
-                if current_state != last_states[i] {
-                    if let Err(e) = self.send_notification(endpoint, current_state).await {
-                        error!("Erro ao enviar notificação: {}", e);
+                // Tratamento de erro robusto ao verificar endpoint
+                match self.check_endpoint(endpoint).await {
+                    Ok(current_state) => {
+                        if current_state != last_states[i] {
+                            if let Err(e) = self.send_notification(endpoint, current_state).await {
+                                error!("Erro ao enviar notificação para {}: {}", endpoint.name, e);
+                            }
+                            last_states[i] = current_state;
+                        }
                     }
-                    last_states[i] = current_state;
+                    Err(e) => {
+                        error!("Erro crítico ao monitorar {}: {}", endpoint.name, e);
+                        // Em caso de erro de rede, assumimos que o estado pode ter mudado para DOWN
+                        if last_states[i] {
+                            let _ = self.send_notification(endpoint, false).await;
+                            last_states[i] = false;
+                        }
+                    }
                 }
             }
 
@@ -164,8 +196,8 @@ async fn main() -> Result<()> {
         }
     }
 
-    // Valida configuração
-    config.validate()?;
+    // Valida configuração com o novo sistema de erros
+    config.validate().map_err(|e| anyhow!("Erro de configuração: {}", e))?;
 
     let monitor = Monitor::new(config)?;
     monitor.run().await;
