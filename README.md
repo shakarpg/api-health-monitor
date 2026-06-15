@@ -5,9 +5,10 @@ Um monitor de saúde de APIs leve, assíncrono e profissional desenvolvido em Ru
 ## 🚀 Funcionalidades
 
 - **Assincronismo:** Utiliza `tokio` e `reqwest` para checagens de alta performance.
+- **Tratamento de Erros Idiomático:** Implementação robusta usando `thiserror` para erros customizados e `anyhow` para propagação limpa.
 - **Configuração Flexível:** Gerencie endpoints via `config.yaml` com suporte a variáveis de ambiente via `.env`.
-- **Validação Robusta:** Validação rigorosa de URLs e códigos de status na inicialização.
-- **Alertas Inteligentes:** Integração com Webhooks (Discord/Slack/Teams) com lógica anti-spam.
+- **Validação Robusta:** Validação rigorosa de URLs e códigos de status na inicialização com tipos de erro específicos.
+- **Alertas Inteligentes:** Integração com Webhooks (Discord/Slack/Teams) com lógica anti-spam e tratamento de falhas de rede.
 - **Testes de Qualidade:** Suite de testes unitários usando `wiremock` para simular cenários de rede.
 
 ## 📋 Pré-requisitos
@@ -53,8 +54,8 @@ O executável estará em `./target/release/api-health-monitor`.
 
 ## 🧠 Por que este projeto é profissional?
 
-1. **Segurança de Memória:** Rust garante que não haverá *crashes* por acesso inválido à memória.
+1. **Tratamento de Erros de Nível Sênior:** O uso de `thiserror` permite categorizar falhas (configuração, rede, validação), facilitando o monitoramento e debugging.
 2. **Concorrência Segura:** O uso de `async/await` permite monitorar centenas de APIs com baixíssimo consumo de recursos.
-3. **Validação de Entrada:** O programa valida URLs e configurações antes de iniciar, evitando erros em tempo de execução.
-4. **Tratamento de Erros:** Uso de `anyhow` para propagação limpa de erros e logs detalhados.
+3. **Resiliência:** O loop principal é projetado para sobreviver a falhas temporárias de rede sem interromper o monitoramento de outros serviços.
+4. **Validação de Entrada:** O programa valida URLs e configurações antes de iniciar, utilizando um sistema de tipos rigoroso.
 5. **Segredos Protegidos:** Uso de `.env` e `config.example.yaml` para evitar vazamento de chaves sensíveis no controle de versão.
