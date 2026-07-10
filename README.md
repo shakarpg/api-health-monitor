@@ -5,6 +5,7 @@ Um monitor de saúde de APIs leve, assíncrono e profissional desenvolvido em Ru
 ## 🚀 Funcionalidades
 
 - **Assincronismo:** Utiliza `tokio` e `reqwest` para checagens de alta performance.
+- **Observabilidade Avançada:** Implementação de logs estruturados e rastreamento assíncrono usando `tracing` e `tracing-subscriber`.
 - **Tratamento de Erros Idiomático:** Implementação robusta usando `thiserror` para erros customizados e `anyhow` para propagação limpa.
 - **Configuração Flexível:** Gerencie endpoints via `config.yaml` com suporte a variáveis de ambiente via `.env`.
 - **Validação Robusta:** Validação rigorosa de URLs e códigos de status na inicialização com tipos de erro específicos.
@@ -34,6 +35,7 @@ Um monitor de saúde de APIs leve, assíncrono e profissional desenvolvido em Ru
 
 Para rodar o monitor localmente:
 ```bash
+# Níveis de log suportados: trace, debug, info, warn, error
 RUST_LOG=info cargo run
 ```
 
@@ -54,8 +56,8 @@ O executável estará em `./target/release/api-health-monitor`.
 
 ## 🧠 Por que este projeto é profissional?
 
-1. **Tratamento de Erros de Nível Sênior:** O uso de `thiserror` permite categorizar falhas (configuração, rede, validação), facilitando o monitoramento e debugging.
-2. **Concorrência Segura:** O uso de `async/await` permite monitorar centenas de APIs com baixíssimo consumo de recursos.
-3. **Resiliência:** O loop principal é projetado para sobreviver a falhas temporárias de rede sem interromper o monitoramento de outros serviços.
-4. **Validação de Entrada:** O programa valida URLs e configurações antes de iniciar, utilizando um sistema de tipos rigoroso.
-5. **Segredos Protegidos:** Uso de `.env` e `config.example.yaml` para evitar vazamento de chaves sensíveis no controle de versão.
+1. **Observabilidade de Nível Sênior:** O uso de `tracing` permite acompanhar o ciclo de vida de cada requisição assíncrona com contexto (campos estruturados), facilitando muito o debugging em produção comparado a logs de texto simples.
+2. **Tratamento de Erros:** O uso de `thiserror` permite categorizar falhas (configuração, rede, validação), facilitando o monitoramento.
+3. **Concorrência Segura:** O uso de `async/await` permite monitorar centenas de APIs com baixíssimo consumo de recursos.
+4. **Resiliência:** O loop principal é projetado para sobreviver a falhas temporárias de rede sem interromper o monitoramento de outros serviços.
+5. **Validação de Entrada:** O programa valida URLs e configurações antes de iniciar, utilizando um sistema de tipos rigoroso.
