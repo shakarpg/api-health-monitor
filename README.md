@@ -6,6 +6,7 @@ Um monitor de saúde de APIs leve, assíncrono e profissional desenvolvido em Ru
 
 - **Assincronismo:** Utiliza `tokio` e `reqwest` para checagens de alta performance.
 - **Observabilidade Avançada:** Implementação de logs estruturados e rastreamento assíncrono usando `tracing` e `tracing-subscriber`.
+- **Métricas Prometheus:** Exposição de métricas de latência e taxa de erro por endpoint em um endpoint `/metrics` compatível com Prometheus.
 - **Tratamento de Erros Idiomático:** Implementação robusta usando `thiserror` para erros customizados e `anyhow` para propagação limpa.
 - **Configuração Flexível:** Gerencie endpoints via `config.yaml` com suporte a variáveis de ambiente via `.env`.
 - **Validação Robusta:** Validação rigorosa de URLs e códigos de status na inicialização com tipos de erro específicos.
@@ -29,7 +30,7 @@ Um monitor de saúde de APIs leve, assíncrono e profissional desenvolvido em Ru
    DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/sua-url-aqui
    ```
 
-3. (Opcional) Edite o `config.yaml` para adicionar os endpoints que deseja monitorar.
+3. (Opcional) Edite o `config.yaml` para adicionar os endpoints que deseja monitorar e o `metrics_port` (padrão: 9090).
 
 ## 🏃 Como Executar
 
@@ -38,6 +39,8 @@ Para rodar o monitor localmente:
 # Níveis de log suportados: trace, debug, info, warn, error
 RUST_LOG=info cargo run
 ```
+
+O servidor de métricas estará disponível em `http://localhost:9090/metrics` (ou na porta configurada).
 
 ## 🧪 Como Rodar os Testes
 
@@ -57,7 +60,8 @@ O executável estará em `./target/release/api-health-monitor`.
 ## 🧠 Por que este projeto é profissional?
 
 1. **Observabilidade de Nível Sênior:** O uso de `tracing` permite acompanhar o ciclo de vida de cada requisição assíncrona com contexto (campos estruturados), facilitando muito o debugging em produção comparado a logs de texto simples.
-2. **Tratamento de Erros:** O uso de `thiserror` permite categorizar falhas (configuração, rede, validação), facilitando o monitoramento.
-3. **Concorrência Segura:** O uso de `async/await` permite monitorar centenas de APIs com baixíssimo consumo de recursos.
-4. **Resiliência:** O loop principal é projetado para sobreviver a falhas temporárias de rede sem interromper o monitoramento de outros serviços.
-5. **Validação de Entrada:** O programa valida URLs e configurações antes de iniciar, utilizando um sistema de tipos rigoroso.
+2. **Métricas de Produção:** Expor métricas no formato Prometheus permite a integração com ferramentas de monitoramento como Grafana, oferecendo visibilidade em tempo real sobre a saúde e performance das APIs.
+3. **Tratamento de Erros:** O uso de `thiserror` permite categorizar falhas (configuração, rede, validação), facilitando o monitoramento.
+4. **Concorrência Segura:** O uso de `async/await` permite monitorar centenas de APIs com baixíssimo consumo de recursos.
+5. **Resiliência:** O loop principal é projetado para sobreviver a falhas temporárias de rede sem interromper o monitoramento de outros serviços.
+6. **Validação de Entrada:** O programa valida URLs e configurações antes de iniciar, utilizando um sistema de tipos rigoroso.

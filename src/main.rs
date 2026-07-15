@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::time::sleep;
 use reqwest::Client;
 use anyhow::{Result, Context, anyhow};
@@ -10,6 +10,10 @@ use dotenvy::dotenv;
 use thiserror::Error;
 use tracing::{info, error, warn, instrument};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+use metrics::{counter, histogram};
+use metrics_exporter_prometheus::PrometheusBuilder;
+use axum::{routing::get, Router};
+use std::net::SocketAddr;
 
 /// Erros customizados para o Monitor de Saúde
 #[derive(Error, Debug)]
@@ -44,6 +48,12 @@ struct Config {
     check_interval_seconds: u64,
     endpoints: Vec<Endpoint>,
     notifications: Notifications,
+    #[serde(default = "default_metrics_port")]
+    metrics_port: u16,
+}
+
+fn default_metrics_port() -> u16 {
+    9090
 }
 
 impl Config {
@@ -97,18 +107,34 @@ impl Monitor {
     async fn check_endpoint(&self, endpoint: &Endpoint) -> Result<bool, MonitorError> {
         info!(url = %endpoint.url, "Iniciando checagem de endpoint");
         
-        let response = self.client.get(&endpoint.url).send().await
-            .map_err(|e| MonitorError::HttpRequestError { 
-                name: endpoint.name.clone(), 
-                source: e 
-            })?;
+        let start = Instant::now();
+        let response_result = self.client.get(&endpoint.url).send().await;
+        let duration = start.elapsed();
+
+        // Registra a latência da requisição
+        histogram!("api_check_duration_seconds", duration.as_secs_f64(), "endpoint" => endpoint.name.clone());
+
+        let response = match response_result {
+            Ok(res) => res,
+            Err(e) => {
+                counter!("api_check_errors_total", 1, "endpoint" => endpoint.name.clone(), "reason" => "request_failed");
+                return Err(MonitorError::HttpRequestError { 
+                    name: endpoint.name.clone(), 
+                    source: e 
+                });
+            }
+        };
 
         let status = response.status().as_u16();
-        if status == endpoint.expected_status {
+        let is_up = status == endpoint.expected_status;
+
+        if is_up {
             info!(status = status, "Endpoint está UP");
+            counter!("api_check_success_total", 1, "endpoint" => endpoint.name.clone());
             Ok(true)
         } else {
             warn!(status = status, expected = endpoint.expected_status, "Endpoint está DOWN!");
+            counter!("api_check_errors_total", 1, "endpoint" => endpoint.name.clone(), "reason" => "wrong_status");
             Ok(false)
         }
     }
@@ -147,6 +173,7 @@ impl Monitor {
         info!(
             endpoint_count = self.config.endpoints.len(),
             interval = self.config.check_interval_seconds,
+            metrics_port = self.config.metrics_port,
             "Iniciando Monitor de Saúde de APIs..."
         );
 
@@ -178,6 +205,23 @@ impl Monitor {
     }
 }
 
+async fn start_metrics_server(port: u16) -> Result<()> {
+    let builder = PrometheusBuilder::new();
+    let handle = builder
+        .install_recorder()
+        .context("Falha ao instalar o gravador Prometheus")?;
+
+    let app = Router::new().route("/metrics", get(move || async move { handle.render() }));
+
+    let addr = SocketAddr::from(([0, 0, 0, 0], port));
+    info!("Servidor de métricas ouvindo em http://{}", addr);
+    
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    axum::serve(listener, app).await?;
+
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     // Inicializa o tracing com suporte a variáveis de ambiente (RUST_LOG)
@@ -206,7 +250,16 @@ async fn main() -> Result<()> {
     // Valida configuração
     config.validate().map_err(|e| anyhow!("Erro de configuração: {}", e))?;
 
+    let metrics_port = config.metrics_port;
     let monitor = Monitor::new(config)?;
+
+    // Inicia o servidor de métricas em uma tarefa separada
+    tokio::spawn(async move {
+        if let Err(e) = start_metrics_server(metrics_port).await {
+            error!(error = %e, "Falha ao iniciar o servidor de métricas");
+        }
+    });
+
     monitor.run().await;
 
     Ok(())
@@ -231,6 +284,7 @@ mod tests {
             check_interval_seconds: 60,
             endpoints: vec![],
             notifications: Notifications { enabled: false, webhook_url: None },
+            metrics_port: 9090,
         };
         let monitor = Monitor::new(config).unwrap();
         
